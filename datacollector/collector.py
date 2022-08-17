@@ -199,12 +199,10 @@ class DataCrawler():
             MyCompanysCounter = MyCompanysCounter + 1
             print(
                 f'****************  Fetching company {MyCompanysCounter*100}-{(MyCompanysCounter+1)*100} *************')
-
             MyCompanysReturned = GetPatComapnyPage(MyCompanysCounter)
             TotalFilteredComapnys = MyCompanysReturned['totalFiltered']
             TotalCompanys = MyCompanysReturned['total']
             MyCompanysReturned = MyCompanysReturned['data']
-
             try:
                 if (len(MyCompanysReturned) == 0):
                     break
@@ -215,7 +213,6 @@ class DataCrawler():
             except Exception as e:
                 print(f'Exception: {e}')
                 break
-
             for company in MyCompanysReturned:
                 NumberofComapnys = NumberofComapnys + 1
                 if(company['name'].lower() not in MyCompanys):
@@ -270,11 +267,11 @@ class DataCrawler():
         if TotalNumberOfCompanies > 0:
             Counter = 0
 
-            for thiscompany in MyCompanys:
+            for indexstart, thiscompany in enumerate(MyCompanys):
                 CompanyRDIIntervall = []
-                if not thiscompany in StocksjsoninMemory:
-                    StocksjsoninMemory[thiscompany] = {}
-                StocksjsoninMemory[thiscompany]['UsableData'] = False
+                if not thiscompany.name in StocksjsoninMemory:
+                    StocksjsoninMemory[thiscompany.name] = {}
+                StocksjsoninMemory[thiscompany.name]['UsableData'] = False
                 try:
                     # if 'sectorId' in MyCompanys[thiscompany] and 'branchId' in MyCompanys[thiscompany]:
                     #     if not MyCompanys[thiscompany]['sectorId'] in companysectorbrachsummery:
@@ -287,11 +284,9 @@ class DataCrawler():
                     #                               ][MyCompanys[thiscompany]['branchId']].append(thiscompany)
 
                     print(f'looking at {thiscompany.name}', end='\r')
-
                     Missingdiffs = 0
                     #smallstart = time.time()
                     Counter += 1
-
                     from_string = str(
                         int(datetime.timestamp(self.settings.firstInculdedDate)))
                     to_string = str(
@@ -301,7 +296,8 @@ class DataCrawler():
                         thiscompany.shortName, from_string, to_string, self.settings.daysToInclude)
                     if(len(History['t']) < self.settings.daysToInclude):
                         print('', end='\r')
-                        print(f'looking at {thiscompany} ...To little data')
+                        print(
+                            f'looking at {thiscompany.name} ...To little data')
                         continue
 
                     removedstocklencounter = 0
@@ -320,19 +316,19 @@ class DataCrawler():
                             if(mydate > self.settings.firstInculdedDate):
                                 print('', end='\r')
                                 print(
-                                    'looking at {thiscompany} ...to late first date')
+                                    'looking at {thiscompany.name} ...to late first date')
                                 break
 
-                        StocksjsoninMemory[thiscompany][str(mydate)] = {}
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(mydate)] = {}
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['open'] = History['o'][index]
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['close'] = History['c'][index]
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['high'] = History['h'][index]
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['low'] = History['l'][index]
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['volume'] = History['v'][index]
                         Histotycounter = 0
                         while(History['v'][index] == 0):
@@ -340,11 +336,11 @@ class DataCrawler():
                                                                1 - Histotycounter]
                             Histotycounter = Histotycounter - 1
 
-                        StocksjsoninMemory[thiscompany][str(mydate)]['daydiff_volume'] = (
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]['daydiff_volume'] = (
                             History['o'][index] - History['c'][index])/History['v'][index]
 
                         CompanyRDIIntervall.append(
-                            StocksjsoninMemory[thiscompany][str(mydate)]['close'])
+                            StocksjsoninMemory[thiscompany.name][str(mydate)]['close'])
 
                         while (len(CompanyRDIIntervall) > self.settings.RSIintervall):
                             CompanyRDIIntervall.pop(0)
@@ -370,41 +366,41 @@ class DataCrawler():
 
                         rs = ups/downs
                         rsi = 100-(100/(1 + rs))
-                        StocksjsoninMemory[thiscompany][str(
+                        StocksjsoninMemory[thiscompany.name][str(
                             mydate)]['Rsi'] = rsi
 
-                        if len(StocksjsoninMemory[thiscompany]) > 2:
+                        if len(StocksjsoninMemory[thiscompany.name]) > 2:
 
                             backcounter = 1
                             yesterday = mydate-timedelta(days=1)
-                            while not str(yesterday) in StocksjsoninMemory[thiscompany]:
+                            while not str(yesterday) in StocksjsoninMemory[thiscompany.name]:
 
                                 yesterday = yesterday-timedelta(days=1)
                                 backcounter += 1
 
-                            Lastknownprice = StocksjsoninMemory[thiscompany][str(
+                            Lastknownprice = StocksjsoninMemory[thiscompany.name][str(
                                 yesterday)]['close']
-                            AvrageChange = (StocksjsoninMemory[thiscompany][str(
+                            AvrageChange = (StocksjsoninMemory[thiscompany.name][str(
                                 mydate)]['close'] - Lastknownprice)/backcounter
 
                             dayAfter = yesterday + timedelta(days=1)
-                            while not str(dayAfter) in StocksjsoninMemory[thiscompany]:
+                            while not str(dayAfter) in StocksjsoninMemory[thiscompany.name]:
 
-                                StocksjsoninMemory[thiscompany][str(dayAfter)] = {
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)] = {
                                 }
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['close'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['close'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['close'] + AvrageChange
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['Rsi'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['Rsi'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['Rsi']
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['open'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['open'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['open']
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['high'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['high'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['high']
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['low'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['low'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['low']
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['volume'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['volume'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['volume']
-                                StocksjsoninMemory[thiscompany][str(dayAfter)]['daydiff_volume'] = StocksjsoninMemory[thiscompany][str(
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]['daydiff_volume'] = StocksjsoninMemory[thiscompany.name][str(
                                     dayAfter - timedelta(days=1))]['daydiff_volume']
                                 dayAfter = dayAfter + timedelta(days=1)
 
@@ -413,13 +409,13 @@ class DataCrawler():
                     UsableData = False
                     if (RatioDataCreated <= self.settings.ValidStockdataLimit):
                         UsableData = True
-                    StocksjsoninMemory[thiscompany]['UsableData'] = UsableData
+                    StocksjsoninMemory[thiscompany.name]['UsableData'] = UsableData
                 except Exception as e:
                     print(e)
                     print(
-                        f'at {index} in {thiscompany}, removed from StocksjsoninMemory')
+                        f'at {index} in {thiscompany.name}, removed from StocksjsoninMemory')
 
-                    StocksjsoninMemory.pop(thiscompany, None)
+                    StocksjsoninMemory.pop(thiscompany.name, None)
                     continue
 
                 SmallEnd = time.time()
@@ -431,7 +427,7 @@ class DataCrawler():
                 print(
                     f'****************                            StockDownloaded                     ************************')
                 print(
-                    f'*   Company: {thiscompany}                                                              ')
+                    f'*   Company: {thiscompany.name}                                                              ')
                 print(
                     f'*   Elapsed time: {ELAPSED}s with an avrage time per loop:{AVRAGE}s                                     ')
                 print(
@@ -446,7 +442,6 @@ class DataCrawler():
                     f'****************                           *********                            ************************')
                 print(f' ')
                 print(f' ')
-                break
 
             # print(f'Writing company sector branch to disk......')
             # if (os.path.exists(SettingsObject.CompanysecbraFile)):
@@ -459,8 +454,9 @@ class DataCrawler():
             #     os.remove(SettingsObject.StocksFile)
             # OverWriteJson(SettingsObject.StocksFile, StocksjsoninMemory)
 
-            for comapnystock in StocksjsoninMemory:
-                for datapointday in comapnystock.companystockday_set.all():
+            for index3, comapnystock in enumerate(StocksjsoninMemory):
+                print(index3, ' writing stock to db... ', comapnystock)
+                for datapointday in StocksjsoninMemory[comapnystock]:
                     # comapny = models.ForeignKey(Companies, on_delete=models.DO_NOTHING)
                     # timestamp = models.DateTimeField(default=None, blank=True)
                     # close = models.FloatField(default=-1)
@@ -469,16 +465,17 @@ class DataCrawler():
                     # low = models.FloatField(default=-1)
                     # volume = models.FloatField(default=-1)
                     # daydiff_volume = models.FloatField(default=-1)
-                    CompanyStockDay.objects.get_or_create(
-                        comapny=Companies.objects.get(name=comapnystock),
-                        timestamp=datapointday,
-                        close=datapointday.close,
-                        open=datapointday.open,
-                        high=datapointday.high,
-                        low=datapointday.low,
-                        volume=datapointday.volume,
-                        daydiff_volume=datapointday.daydiff_volume,
-                    )
+                    if datapointday != 'UsableData':
+                        CompanyStockDay.objects.get_or_create(
+                            comapny=Companies.objects.get(name=comapnystock),
+                            timestamp=datapointday,
+                            close=StocksjsoninMemory[comapnystock][datapointday]['close'],
+                            open=StocksjsoninMemory[comapnystock][datapointday]['open'],
+                            high=StocksjsoninMemory[comapnystock][datapointday]['high'],
+                            low=StocksjsoninMemory[comapnystock][datapointday]['low'],
+                            volume=StocksjsoninMemory[comapnystock][datapointday]['volume'],
+                            daydiff_volume=StocksjsoninMemory[comapnystock][datapointday]['daydiff_volume'],
+                        )
 
             print(f'Writing company_sector_brach_summery to disk')
 
