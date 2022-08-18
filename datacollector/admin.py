@@ -17,3 +17,7 @@ class CompanyStockDayAdmin(admin.ModelAdmin):
 @admin.register(CollectorSettings)
 class CollectorSettingsAdmin(admin.ModelAdmin):
     pass
+
+@admin.register(TrainingDataRegister)
+class TrainingDataRegisterAdmin(admin.ModelAdmin):
+    pass

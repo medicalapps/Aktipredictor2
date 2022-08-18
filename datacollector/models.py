@@ -32,6 +32,7 @@ class Companies(models.Model):
     branchId = models.IntegerField(default=-1)
     countryUrlName = models.CharField(max_length=127, default='NOURL')
     shortName = models.CharField(max_length=127, default='NOSHORTNAME')
+    corruptData = models.BooleanField(default=False)
 
 
 class CompanyStockDay(models.Model):
@@ -43,6 +44,23 @@ class CompanyStockDay(models.Model):
     low = models.FloatField(default=-1)
     volume = models.FloatField(default=-1)
     daydiff_volume = models.FloatField(default=-1)
+
+
+class WorldKPI(models.Model):
+    group = models.CharField(max_length=127, default='NONAME')
+    name = models.CharField(max_length=127, default='NONAME')
+    timestamp = models.DateTimeField(default=None, blank=True)
+    value = models.FloatField(default=-1)
+
+
+class TrainingDataRegister(models.Model):
+    comapnys = models.ManyToManyField(Companies, blank=True)
+    worldKPIs = models.ManyToManyField(WorldKPI, blank=True)
+    networkName = models.CharField(max_length=127, default='NONAME')
+    timestamp = models.DateTimeField(auto_now=True)
+    fileName = models.CharField(max_length=127, default='NONAME')
+    targets  = models.ManyToManyField(Companies, blank=True, related_name='MyTargets')
+    predictingDays = models.IntegerField(default=-1)
 
 
 # {
