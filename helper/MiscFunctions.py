@@ -17,17 +17,20 @@ def writetodisk(mydata, myfile):
     with open(myfile, 'a+', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(mydata)
+        file.close()
 
 def overwritelisttodisk(mydata, myfile):
     with open(myfile, 'w+', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(mydata)
     
-def overwritetodisk(mydata, myfile):
-    with open(myfile, 'w+', newline='') as file:
-        writer = csv.writer(file,  delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+def appendToFileOnDisk(mydata, myfile):
+    with open(myfile, 'a+', newline='') as file:
+        writer = csv.writer(file,  delimiter=',')
         for row in mydata:
             writer.writerow(row)
+       
+        file.close()   
 
 
 def writeJson(filename, Writedata):

@@ -1,3 +1,4 @@
+from msilib.schema import Error
 from sqlite3 import Timestamp
 
 
@@ -13,7 +14,7 @@ import requests
 
 from bs4 import BeautifulSoup
 from dateutil.parser import parse
-from datacollector.models import *
+from crawler.models import *
 
 # GDC = GetDataClass
 # GDC.GetCompanyList()
@@ -23,23 +24,23 @@ from datacollector.models import *
 
 
 class DataCrawler:
-    def __init__(self):
+    def __init__(self, CollctorSettingsName=None):
         super(DataCrawler, self).__init__()
-        self.settings = CollectorSettings.objects.first()
-        if self.settings is None:
-            CollectorSettings.objects.create(
-                daysToInclude=365,
-                RSIintervall=30,
-                ValidStockdataLimit=70,
-                avrageWindow=3,
-            )
+        try:
+            self.settings = CollectorSettings.objects.get(registerName='Default')
+        except CollectorSettings.DoesNotExist:
+            self.settings = CollectorSettings.objects.create(registerName='Default')
+            
+        try:
+            self.settings = CollectorSettings.objects.get(registerName=CollctorSettingsName)
+        except CollectorSettings.DoesNotExist:
+            if( CollctorSettingsName is not None):
+                self.settings = CollectorSettings.objects.create(registerName=CollctorSettingsName)
+          
+                
         now = datetime.now().replace(tzinfo=pytz.utc)
-        self.settings.firstInculdedDate = (
-            datetime.now() - timedelta(days=(self.settings.daysToInclude))
-        ).replace(hour=0, minute=0, tzinfo=pytz.utc)
-        self.settings.lastIncudedDate = datetime.now().replace(
-            hour=0, minute=0, tzinfo=pytz.utc
-        )
+        self.settings.firstInculdedDate = (now - timedelta(days=(self.settings.daysToCollect))).replace(hour=0, minute=0, tzinfo=pytz.utc)
+        self.settings.lastIncudedDate = now.replace(hour=0, minute=0, tzinfo=pytz.utc)
         self.settings.save()
 
     def utcformat(self, dt, timespec="milliseconds"):
@@ -313,16 +314,37 @@ class DataCrawler:
 
         for company in MyCompanys:
             try:
-                thisCompany = Companies.objects.get_or_create(
-                    name=company,
-                    companyId=MyCompanys[company]["companyId"],
-                    countryId=MyCompanys[company]["countryId"],
-                    marketId=MyCompanys[company]["marketId"],
-                    sectorId=MyCompanys[company]["sectorId"],
-                    branchId=MyCompanys[company]["branchId"],
-                    countryUrlName=MyCompanys[company]["countryUrlName"],
-                    shortName=MyCompanys[company]["shortName"],
-                )
+                thisCompany = Companies.objects.get(name=company)
+                thisCompany.companyId=MyCompanys[company]["companyId"]
+                thisCompany.countryId=MyCompanys[company]["countryId"]
+                thisCompany.marketId=MyCompanys[company]["marketId"]
+                thisCompany.sectorId=MyCompanys[company]["sectorId"]
+                thisCompany.branchId=MyCompanys[company]["branchId"]
+                thisCompany.countryUrlName=MyCompanys[company]["countryUrlName"]
+                thisCompany.shortName=MyCompanys[company]["shortName"]
+                thisCompany.save()
+            except Companies.DoesNotExist:
+                try:
+                    thisCompany = Companies.objects.create(
+                        name=company,
+                        companyId=MyCompanys[company]["companyId"],
+                        countryId=MyCompanys[company]["countryId"],
+                        marketId=MyCompanys[company]["marketId"],
+                        sectorId=MyCompanys[company]["sectorId"],
+                        branchId=MyCompanys[company]["branchId"],
+                        countryUrlName=MyCompanys[company]["countryUrlName"],
+                        shortName=MyCompanys[company]["shortName"],
+                    )
+                except:
+                    continue
+            except:
+                continue  
+            try:
+                self.settings.comapnys.get(id= thisCompany.id)
+            except Companies.DoesNotExist:
+                    self.settings.comapnys.add(thisCompany)
+                    self.settings.save()
+                    
             except Exception as e:
                 print(e)
 
@@ -332,7 +354,7 @@ class DataCrawler:
         StocksjsoninMemory = {}
         companysectorbrachsummery = {}
 
-        MyCompanys = Companies.objects.all()
+        MyCompanys = self.settings.comapnys.all()
 
         TotalNumberOfCompanies = MyCompanys.count()
 
@@ -370,9 +392,9 @@ class DataCrawler:
                         thiscompany.shortName,
                         from_string,
                         to_string,
-                        self.settings.daysToInclude,
+                        self.settings.daysToCollect,
                     )
-                    if len(History["t"]) < self.settings.daysToInclude:
+                    if len(History["t"]) < self.settings.daysToCollect:
                         print("", end="\r")
                         print(f"looking at {thiscompany.name} ...To little data")
                         continue
@@ -622,16 +644,19 @@ class DataCrawler:
                     # daydiff_volume = models.FloatField(default=-1)
                     if datapointday != "UsableData":
                         stockcount += 1
-                        CompanyStockDay.objects.get_or_create(
-                            comapny=Companies.objects.get(name=comapnystock),
-                            timestamp=datetime.strptime(datapointday, "%Y-%m-%d %H:%M:%S%z"),
-                            close=StocksjsoninMemory[comapnystock][datapointday]["close"],
-                            open=StocksjsoninMemory[comapnystock][datapointday]["open"],
-                            high=StocksjsoninMemory[comapnystock][datapointday]["high"],
-                            low=StocksjsoninMemory[comapnystock][datapointday]["low"],
-                            volume=StocksjsoninMemory[comapnystock][datapointday]["volume"],
-                            daydiff_volume=StocksjsoninMemory[comapnystock][datapointday]["daydiff_volume"],
-                        )
+                        try:
+                             CompanyStockDay.objects.get(timestamp=datetime.strptime(datapointday, "%Y-%m-%d %H:%M:%S%z"))
+                        except CompanyStockDay.DoesNotExist: 
+                            CompanyStockDay.objects.create(
+                                comapny=Companies.objects.get(name=comapnystock),
+                                timestamp=datetime.strptime(datapointday, "%Y-%m-%d %H:%M:%S%z"),
+                                close=StocksjsoninMemory[comapnystock][datapointday]["close"],
+                                open=StocksjsoninMemory[comapnystock][datapointday]["open"],
+                                high=StocksjsoninMemory[comapnystock][datapointday]["high"],
+                                low=StocksjsoninMemory[comapnystock][datapointday]["low"],
+                                volume=StocksjsoninMemory[comapnystock][datapointday]["volume"],
+                                daydiff_volume=StocksjsoninMemory[comapnystock][datapointday]["daydiff_volume"],
+                            )
                 if index3 == 0:
                     expecteingstocklen = stockcount
   
@@ -662,25 +687,34 @@ class DataCrawler:
     def WriteDataForTraining(self):
         # get or create trainingScheme
         # give a schemeName or leave blak to create new
-        networkName = ""
+        networkName = self.settings.currentNetwork
 
         registers = TrainingDataRegister.objects.all()
         thisregister = None
-        registerCompanys = Companies.objects.filter(
-                        corruptData=False
-                    ).order_by("companyId")
+        corruptCompanys = Companies.objects.filter(corruptData=True)
+        corruptCompanysArray = []
+        
+        registerCompanys = Companies.objects.all().order_by("companyId")
+        
+        for corruptCompany in corruptCompanys:
+            registerCompanys.exclude(pk=corruptCompany.pk)
+            corruptCompanysArray.append(corruptCompany.companyId)
+            print(f'Excluded {corruptCompany.name}, corrupt')
         try:
             # if no name given, is tehre already one to reuse?
             if networkName == "":
                 # there is no register, create..
+                networkName = ("network_" + str(datetime.now())).replace(':', '-').replace('.','_')
+                self.settings.currentNetwork = networkName
+                self.settings.save()
                 if registers.count() == 0:
-                    newNetworkName = ("network_" + str(datetime.now())).replace(':', '-').replace('.','_')
+                    
                     thisregister = TrainingDataRegister.objects.create(
-                        networkName=newNetworkName
+                        networkName=networkName
                     )
                     for comp in registerCompanys:
                         thisregister.comapnys.add(comp)
-                    thisregister.filename = newNetworkName
+                    thisregister.filename = networkName
                     thisregister.save()
                 else:
                     thisregister = registers.first()
@@ -690,17 +724,17 @@ class DataCrawler:
             else:
                 try:
                     thisregister = TrainingDataRegister.objects.get(
-                        networkName=newNetworkName)
+                        networkName=networkName)
                     thisregister.timestamp = datetime.now()
                     thisregister.save()
                 except TrainingDataRegister.DoesNotExist:
                     thisregister = TrainingDataRegister.objects.create(
-                        networkName=newNetworkName
+                        networkName=networkName
                     )
           
                     for comp in registerCompanys:
                         thisregister.comapnys.add(comp)
-                    thisregister.filename = newNetworkName
+                    thisregister.filename = networkName
                     thisregister.save() 
                     
                 except Exception as e:
@@ -713,12 +747,12 @@ class DataCrawler:
 
         daycounter = 0
 
-        companysToInclude = thisregister.comapnys.all().order_by("companyId")
         YesterdayStockData = None
         while trainingdate <= self.settings.lastIncudedDate:
             TodayStockData = CompanyStockDay.objects.filter(
                 timestamp=trainingdate
             ).order_by("comapny__companyId")
+            
             if(TodayStockData.count() == 0):
                 trainingdate = trainingdate + timedelta(days=1)
                 continue
@@ -726,20 +760,20 @@ class DataCrawler:
             daycounter = daycounter + 1
             for stockindex, thisStock in enumerate(TodayStockData):
                 try:
-                    # relative
+                    if(thisStock.comapny.companyId in corruptCompanysArray):
+                        print ('Corrupt company ', thisStock.comapny)
+                        continue
                     try:
                         # close
                         stockratio = (
                             thisStock.close / YesterdayStockData[stockindex].close
                         )
                         thisrow.append(stockratio)
-                        if stockindex == 0:
-                            print(f"Added stockRatio {stockratio}")
-                    except Exception as e:
-                        if stockindex == 0:
-                            print(f"No stockRatio, added 1..")
 
-                        thisrow.append(1)
+                    except Exception as e:
+                        # if stockindex == 0:
+                        #     print(f"No stockRatio, added 1..")
+                        thisrow.append(1.0)
                     #
                 except Exception as e:
                     print(f"Error: for {thisStock} , {e}")
@@ -749,7 +783,7 @@ class DataCrawler:
 
                 print(f"{trainingdate} : {len(thisrow)} : {thisrow[0:10]}..")
 
-                writetodisk(thisrow, thisregister.fileName + '.csv')
+                appendToFileOnDisk([thisrow] , thisregister.fileName + '.csv')
  
             except Exception as e:
                 raise Exception(f"Critical grand error!!: {e}")

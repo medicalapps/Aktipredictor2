@@ -1,8 +1,7 @@
 from django.contrib import admin
-from datacollector.models import *
+from crawler.models import *
 
 # Register your models here.
-
 
 @admin.register(Companies)
 class CompaniesAdmin(admin.ModelAdmin):
@@ -14,10 +13,10 @@ class CompanyStockDayAdmin(admin.ModelAdmin):
     pass
 
 
-@admin.register(CollectorSettings)
-class CollectorSettingsAdmin(admin.ModelAdmin):
+@admin.register(WorldKPI)
+class WorldKPIAdmin(admin.ModelAdmin):
     pass
 
-@admin.register(TrainingDataRegister)
-class TrainingDataRegisterAdmin(admin.ModelAdmin):
+@admin.register(CollectorSettings)
+class CollectorSettingsAdmin(admin.ModelAdmin):
     pass

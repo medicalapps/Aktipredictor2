@@ -3,28 +3,8 @@ from django.db import models
 from datetime import datetime
 
 # Create your models here.
-
-
-class CollectorSettings(models.Model):
-
-    daysToInclude = models.IntegerField(default=-1)
-    RSIintervall = models.IntegerField(default=-1)
-    ValidStockdataLimit = models.IntegerField(default=-1)
-    avrageWindow = models.IntegerField(default=-1)
-    firstInculdedDate = models.DateTimeField(
-        default=datetime.now(), blank=True)
-    lastIncudedDate = models.DateTimeField(
-        default=datetime.now(), blank=True)
-
-    # class Meta:
-    #     verbose_name_plural = 'Country Population Data'
-
-    # def __str__(self):
-    #     return f'{self.country}-{self.population}'
-
-
 class Companies(models.Model):
-    name = models.CharField(max_length=127, default='NONAME')
+    name = models.CharField(max_length=127, default='')
     companyId = models.IntegerField(default=-1)
     countryId = models.IntegerField(default=-1)
     marketId = models.IntegerField(default=-1)
@@ -53,14 +33,21 @@ class WorldKPI(models.Model):
     value = models.FloatField(default=-1)
 
 
-class TrainingDataRegister(models.Model):
-    comapnys = models.ManyToManyField(Companies, blank=True)
-    worldKPIs = models.ManyToManyField(WorldKPI, blank=True)
-    networkName = models.CharField(max_length=127, default='NONAME')
+class CollectorSettings(models.Model):
+    registerName = models.CharField(max_length=127, default='Unnamed')
+    daysToCollect = models.IntegerField(default=7)
+    RSIintervall = models.IntegerField(default=-1)
+    ValidStockdataLimit = models.IntegerField(default=-1)
+    avrageWindow = models.IntegerField(default=-1)
+    firstInculdedDate = models.DateTimeField(
+        default=datetime.now(), blank=True)
+    lastIncudedDate = models.DateTimeField(
+        default=datetime.now(), blank=True)
+    comapnys = models.ManyToManyField(Companies, blank=True, related_name='CollectedCompanies')
+    worldKPIs = models.ManyToManyField(WorldKPI, blank=True, related_name='CollectedCKPI')
     timestamp = models.DateTimeField(auto_now=True)
     fileName = models.CharField(max_length=127, default='NONAME')
-    targets  = models.ManyToManyField(Companies, blank=True, related_name='MyTargets')
-    predictingDays = models.IntegerField(default=-1)
+    
 
 
 # {
