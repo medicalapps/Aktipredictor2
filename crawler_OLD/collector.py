@@ -15,7 +15,7 @@ import requests
 from bs4 import BeautifulSoup
 from dateutil.parser import parse
 from crawler.models import *
-
+1
 # GDC = GetDataClass
 # GDC.GetCompanyList()
 # GDC.GetAllStockHistory()
@@ -26,19 +26,24 @@ from crawler.models import *
 class DataCrawler:
     def __init__(self, CollctorSettingsName=None):
         super(DataCrawler, self).__init__()
-        try:
-            self.settings = CollectorSettings.objects.get(registerName='Default')
-        except CollectorSettings.DoesNotExist:
-            self.settings = CollectorSettings.objects.create(registerName='Default')
-            
-        try:
-            self.settings = CollectorSettings.objects.get(registerName=CollctorSettingsName)
-        except CollectorSettings.DoesNotExist:
-            if( CollctorSettingsName is not None):
-                self.settings = CollectorSettings.objects.create(registerName=CollctorSettingsName)
+        if(CollctorSettingsName == None):
+            try:
+                self.settings = CollectorSettings.objects.get(collectionName='')
+            except CollectorSettings.DoesNotExist:
+                CollectorSettings.objects.create(collectionName='')
+            except Exception as e:
+                print(e)
+                raise Exception('no collection settings')
+        else:    
+            try:
+                self.settings = CollectorSettings.objects.get(collectionName=CollctorSettingsName)
+            except CollectorSettings.DoesNotExist:
+                self.settings = CollectorSettings.objects.create(collectionName=CollctorSettingsName)
           
                 
         now = datetime.now().replace(tzinfo=pytz.utc)
+        self.settings.collectionTimestamp = now()
+        self.settings.completeColletion = False
         self.settings.firstInculdedDate = (now - timedelta(days=(self.settings.daysToCollect))).replace(hour=0, minute=0, tzinfo=pytz.utc)
         self.settings.lastIncudedDate = now.replace(hour=0, minute=0, tzinfo=pytz.utc)
         self.settings.save()
@@ -336,14 +341,15 @@ class DataCrawler:
                         shortName=MyCompanys[company]["shortName"],
                     )
                 except:
+     
                     continue
             except:
                 continue  
             try:
                 self.settings.comapnys.get(id= thisCompany.id)
             except Companies.DoesNotExist:
-                    self.settings.comapnys.add(thisCompany)
-                    self.settings.save()
+                self.settings.comapnys.add(thisCompany)
+                self.settings.save()
                     
             except Exception as e:
                 print(e)
@@ -355,12 +361,14 @@ class DataCrawler:
         companysectorbrachsummery = {}
 
         MyCompanys = self.settings.comapnys.all()
+        CreatingCollection = (self.settings.collectionName == '')
 
         TotalNumberOfCompanies = MyCompanys.count()
 
         if TotalNumberOfCompanies > 0:
             Counter = 0
-
+            from_string = str(int(datetime.timestamp(self.settings.firstInculdedDate)))
+            to_string = str(int(datetime.timestamp(self.settings.lastIncudedDate)))
             for indexstart, thiscompany in enumerate(MyCompanys):
                 CompanyRDIIntervall = []
                 if not thiscompany.name in StocksjsoninMemory:
@@ -381,12 +389,7 @@ class DataCrawler:
                     Missingdiffs = 0
                     # smallstart = time.time()
                     Counter += 1
-                    from_string = str(
-                        int(datetime.timestamp(self.settings.firstInculdedDate))
-                    )
-                    to_string = str(
-                        int(datetime.timestamp(self.settings.lastIncudedDate))
-                    )
+
 
                     History = GetPatComapnyHistory(
                         thiscompany.shortName,
@@ -394,10 +397,15 @@ class DataCrawler:
                         to_string,
                         self.settings.daysToCollect,
                     )
-                    if len(History["t"]) < self.settings.daysToCollect:
-                        print("", end="\r")
-                        print(f"looking at {thiscompany.name} ...To little data")
-                        continue
+                    if(CreatingCollection):
+                        if len(History["t"]) < self.settings.daysToCollect:
+                            print("", end="\r")
+                            print(f"looking at {thiscompany.name} ...To little data")
+                            StocksjsoninMemory.pop(thiscompany.name, None)
+                            self.settings.comapnys.remove(thiscompany)
+                            self.settings.save()
+                            
+                            continue
 
                     removedstocklencounter = 0
 
@@ -451,9 +459,7 @@ class DataCrawler:
                             ]
                             Histotycounter = Histotycounter - 1
 
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "daydiff_volume"
-                        ] = (History["o"][index] - History["c"][index]) / History["v"][
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["daydiff_volume"] = (History["o"][index] - History["c"][index]) / History["v"][
                             index
                         ]
 
@@ -512,62 +518,15 @@ class DataCrawler:
                             ) / backcounter
 
                             dayAfter = yesterday + timedelta(days=1)
-                            while (
-                                not str(dayAfter)
-                                in StocksjsoninMemory[thiscompany.name]
-                            ):
-
+                            while (not str(dayAfter) in StocksjsoninMemory[thiscompany.name]):
                                 StocksjsoninMemory[thiscompany.name][str(dayAfter)] = {}
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "close"
-                                ] = (
-                                    StocksjsoninMemory[thiscompany.name][
-                                        str(dayAfter - timedelta(days=1))
-                                    ]["close"]
-                                    + AvrageChange
-                                )
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "Rsi"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "Rsi"
-                                ]
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "open"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "open"
-                                ]
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "high"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "high"
-                                ]
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "low"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "low"
-                                ]
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "volume"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "volume"
-                                ]
-                                StocksjsoninMemory[thiscompany.name][str(dayAfter)][
-                                    "daydiff_volume"
-                                ] = StocksjsoninMemory[thiscompany.name][
-                                    str(dayAfter - timedelta(days=1))
-                                ][
-                                    "daydiff_volume"
-                                ]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["close"] = (StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["close"]+ AvrageChange)
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["Rsi"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["Rsi"]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["open"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["open"]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["high"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["high"]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["low"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["low"]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["volume"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["volume"]
+                                StocksjsoninMemory[thiscompany.name][str(dayAfter)]["daydiff_volume"] = StocksjsoninMemory[thiscompany.name][str(dayAfter - timedelta(days=1))]["daydiff_volume"]
                                 dayAfter = dayAfter + timedelta(days=1)
 
                     totallemn = index - removedstocklencounter
@@ -577,14 +536,15 @@ class DataCrawler:
                         UsableData = True
                     StocksjsoninMemory[thiscompany.name]["UsableData"] = UsableData
                 except Exception as e:
-                    print(e)
-                    print(
-                        f"at {index} in {thiscompany.name}, removed from StocksjsoninMemory"
-                    )
-
-                    StocksjsoninMemory.pop(thiscompany.name, None)
-                    continue
-        
+                    try:
+                        print(e)
+                        print(f"at {index} in {thiscompany.name}, removed from StocksjsoninMemory")
+                        currentcomapny = Companies.objects.get(neame = thiscompany.name)
+                        self.settings.companys.remove(currentcomapny)
+                        StocksjsoninMemory.pop(thiscompany.name, None)
+                        continue
+                    except:
+                        raise Exception('Cant remove company from collection')
                 SmallEnd = time.time()
                 ELAPSED = SmallEnd - Grandstart
                 AVRAGE = ELAPSED / Counter
@@ -665,9 +625,12 @@ class DataCrawler:
                         f"Anomaly {comapnystock}, got  {stockcount} stocks, expeted {expecteingstocklen}"
                     )
                     try:
+                        
                         thisCompany = Companies.objects.get(name=comapnystock)
                         thisCompany.corruptData = True
                         thisCompany.save()
+                        self.settings.comapnys.remove(thisCompany)
+                        self.settings.save()
                     except Exception as e:
                         print(e)
                         raise Exception(
@@ -684,113 +647,29 @@ class DataCrawler:
 
             print(f"StockCollection Done...")
 
-    def WriteDataForTraining(self):
-        # get or create trainingScheme
-        # give a schemeName or leave blak to create new
-        networkName = self.settings.currentNetwork
 
-        registers = TrainingDataRegister.objects.all()
-        thisregister = None
-        corruptCompanys = Companies.objects.filter(corruptData=True)
-        corruptCompanysArray = []
-        
-        registerCompanys = Companies.objects.all().order_by("companyId")
-        
-        for corruptCompany in corruptCompanys:
-            registerCompanys.exclude(pk=corruptCompany.pk)
-            corruptCompanysArray.append(corruptCompany.companyId)
-            print(f'Excluded {corruptCompany.name}, corrupt')
-        try:
-            # if no name given, is tehre already one to reuse?
-            if networkName == "":
-                # there is no register, create..
-                networkName = ("network_" + str(datetime.now())).replace(':', '-').replace('.','_')
-                self.settings.currentNetwork = networkName
-                self.settings.save()
-                if registers.count() == 0:
-                    
-                    thisregister = TrainingDataRegister.objects.create(
-                        networkName=networkName
-                    )
-                    for comp in registerCompanys:
-                        thisregister.comapnys.add(comp)
-                    thisregister.filename = networkName
-                    thisregister.save()
-                else:
-                    thisregister = registers.first()
-                    thisregister.timestamp = datetime.now()
-                    thisregister.save()
-
-            else:
-                try:
-                    thisregister = TrainingDataRegister.objects.get(
-                        networkName=networkName)
-                    thisregister.timestamp = datetime.now()
-                    thisregister.save()
-                except TrainingDataRegister.DoesNotExist:
-                    thisregister = TrainingDataRegister.objects.create(
-                        networkName=networkName
-                    )
-          
-                    for comp in registerCompanys:
-                        thisregister.comapnys.add(comp)
-                    thisregister.filename = networkName
-                    thisregister.save() 
-                    
-                except Exception as e:
-                    print(e)
-        except Exception as e:
-            print(e)
-            raise Exception("Critical Error, cant get a working TrainingDataRegister")
-
-        trainingdate = self.settings.firstInculdedDate.replace(hour=0, minute =0, second=0, microsecond=0, tzinfo=pytz.utc)
-
-        daycounter = 0
-
-        YesterdayStockData = None
-        while trainingdate <= self.settings.lastIncudedDate:
-            TodayStockData = CompanyStockDay.objects.filter(
-                timestamp=trainingdate
-            ).order_by("comapny__companyId")
+    def do(self):
+        #New Collector
+        if self.settings.collectionName == '':
+            self.settings.completeCollection = False
+            self.settings.save()
             
-            if(TodayStockData.count() == 0):
-                trainingdate = trainingdate + timedelta(days=1)
-                continue
-            thisrow = []
-            daycounter = daycounter + 1
-            for stockindex, thisStock in enumerate(TodayStockData):
-                try:
-                    if(thisStock.comapny.companyId in corruptCompanysArray):
-                        print ('Corrupt company ', thisStock.comapny)
-                        continue
-                    try:
-                        # close
-                        stockratio = (
-                            thisStock.close / YesterdayStockData[stockindex].close
-                        )
-                        thisrow.append(stockratio)
+            self.GetCompanyList()
+            self.GetAllStockHistory()
+            #self.getworldkpi()
+            
+            collectionregCunter = str(CollectorSettings.objects.all().count())
+            self.settings.collectionName = 'Collection_' + collectionregCunter
+            self.settings.completeCollection = True
+            self.settings.save()
+        else:
+            self.settings.completeCollection = False
+            self.settings.save()
+            self.GetAllStockHistory()   
+            self.settings.completeCollection = True
+            self.settings.save()         
 
-                    except Exception as e:
-                        # if stockindex == 0:
-                        #     print(f"No stockRatio, added 1..")
-                        thisrow.append(1.0)
-                    #
-                except Exception as e:
-                    print(f"Error: for {thisStock} , {e}")
-                    raise Exception(e)
-
-            try:
-
-                print(f"{trainingdate} : {len(thisrow)} : {thisrow[0:10]}..")
-
-                appendToFileOnDisk([thisrow] , thisregister.fileName + '.csv')
- 
-            except Exception as e:
-                raise Exception(f"Critical grand error!!: {e}")
-            YesterdayStockData = TodayStockData
-            trainingdate = trainingdate + timedelta(days=1)
-
-            # Graveyard
+ # Graveyard
 
             # for indexWrite, thisKPI in enumerate(MyKPI):
 

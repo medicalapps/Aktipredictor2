@@ -1,26 +1,31 @@
 from ast import Raise
 import os
-from datetime import datetime, timedelta 
+from datetime import datetime, timedelta, timezone 
 import random
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
-from network.models import *
-from datacollector.models import *
+from net.models import *
+from crawler.models import CollectorSettings
 from helper.MiscFunctions import *
 import time
 
 MockData = False
 
 class MyNet(nn.Module):
-    def __init__(self, Networkname, SamplesPerday, hidden_dim, output_dim, n_layers, batchsize = 1, drop_prob=0.01):
+    def __init__(self, Networkname, SamplesPerday, hidden_dim, output_dim):
         super(MyNet, self).__init__()
-        self.settings = Network.objects.get(networkName=Networkname )
-        self.hidden_dim = hidden_dim
-        self.n_layers = n_layers
-        self.batchsize = batchsize
-        self.samplesPerday = SamplesPerday
+        try:
+            self.NetworkSettings = Network.objects.get(networkName=Networkname )
+            self.NetworkSettings.lastrun = datetime.now().replace(tzinfo=timezone.utc)
+        except Network.DoesNotExist:
+            raise Exception('no colletion...')
+        
+        self.hidden_dim = self.NetworkSettings.hidden_dim
+        self.n_layers = self.NetworkSettings.n_layers
+        self.batchsize = self.NetworkSettings.batchsize
+        self.samplesPerday = self.NetworkSettings.SamplesPerday
 
         self.fc0 = nn.Linear(self.samplesPerday, self.samplesPerday, bias=True)
         self.fc1 = nn.Linear(self.samplesPerday, int(self.samplesPerday/4)+1, bias=False)
@@ -28,7 +33,7 @@ class MyNet(nn.Module):
         self.fc3= nn.Linear(int(self.samplesPerday /8)+1, output_dim, bias=False)
         
         self.relu = nn.Sigmoid()
-        self.dropout= nn.Dropout(drop_prob)
+        self.dropout= nn.Dropout(self.NetworkSettings.drop_prob)
         
         self.weights_initialization()
         
@@ -38,7 +43,7 @@ class MyNet(nn.Module):
             
             data = self.fc0(self.relu(data))
             data = self.dropout(data)
-            data = self.fc1(self.relu(data))*Ä
+            data = self.fc1(self.relu(data))
         else:
             data = self.fc0(self.relu(data))
             data = self.dropout(data)
@@ -67,10 +72,10 @@ class MyNet(nn.Module):
             for m in self.modules():
             
                 if isinstance(m, nn.Linear):
-                    m.weight.data.uniform_(self.settings.weightLimitLow, self.settings.weightLimitHigh)
+                    m.weight.data.uniform_(self.NetworkSettings.weightLimitLow, self.NetworkSettings.weightLimitHigh)
                     
                     if(m.bias != None):
-                        m.bias.data.uniform_(self.settings.biasLow, self.settings.biasHigh)  
+                        m.bias.data.uniform_(self.NetworkSettings.biasLow, self.NetworkSettings.biasHigh)  
                 
                 # elif(self.net_type == 'CONV3D'):
                 #     if isinstance(m, nn.Linear):
@@ -85,19 +90,17 @@ class MyNet(nn.Module):
                 #             m.bias.data.uniform_(self.settings.biasLow, self.settings.biasHigh) 
 
 class Training():
-    def __init__(self):
-        self.baseNetworkSettings = NetworkSettings.objects.all().first()
-        self.collectorSettings = CollectorSettings.objects.all().first()
+    def __init__(self, NetworkName = 'Default'):
+        self.NetworkSettings = Network.objects.get_or_create(networkName= NetworkName)
+
         
         self.device = self.get_device()
-        self.settings = self.getSettings()
             
-        self.trainDataReg = self.get_TrainingDataRegister()
         self.targetIndexs = []
         
         
         
-        self.modelFile =  self.baseNetworkSettings.modelPath + self.trainDataReg.networkName + '_model.pth'
+        self.modelFile =  self.NetworkSettings.modelPath
     def prepare_data(self):  
         
         x = []
@@ -255,11 +258,7 @@ class Training():
         return device
 
     def getSettings(self):
-        newNetworkName = self.collectorSettings.currentNetwork
-        thisregister = TrainingDataRegister.objects.get(networkName=newNetworkName)
-        thisregister.timestamp = datetime.now()
-        thisregister.save()
-        return thisregister
+        pass
         
     def mae(self, predictions, targets):
         differences = predictions - targets
@@ -267,21 +266,128 @@ class Training():
         mean_absolute_differences = absolute_differences.mean()
         return mean_absolute_differences
 
-    def go(self):
-        
 
+    def getDataForTraining(self):
+        # get or create trainingScheme
+        # give a schemeName or leave blak to create new
         
+        networkName = self.NetworkSettings.currentNetwork
+
+        thisregister = None
+        corruptCompanys = Companies.objects.filter(corruptData=True)
+        corruptCompanysArray = []
+        
+        registerCompanys = Companies.objects.all().order_by("companyId")
+        
+        for corruptCompany in corruptCompanys:
+            registerCompanys.exclude(pk=corruptCompany.pk)
+            corruptCompanysArray.append(corruptCompany.companyId)
+            print(f'Excluded {corruptCompany.name}, corrupt')
+        try:
+            # if no name given, is tehre already one to reuse?
+            if networkName == "":
+                # there is no register, create..
+                networkName = ("network_" + str(datetime.now())).replace(':', '-').replace('.','_')
+                self.settings.currentNetwork = networkName
+                self.settings.save()
+                if registers.count() == 0:
+                    
+                    thisregister = TrainingDataRegister.objects.create(
+                        networkName=networkName
+                    )
+                    for comp in registerCompanys:
+                        thisregister.comapnys.add(comp)
+                    thisregister.filename = networkName
+                    thisregister.save()
+                else:
+                    thisregister = registers.first()
+                    thisregister.timestamp = datetime.now()
+                    thisregister.save()
+
+            else:
+                try:
+                    thisregister = TrainingDataRegister.objects.get(
+                        networkName=networkName)
+                    thisregister.timestamp = datetime.now()
+                    thisregister.save()
+                except TrainingDataRegister.DoesNotExist:
+                    thisregister = TrainingDataRegister.objects.create(
+                        networkName=networkName
+                    )
+          
+                    for comp in registerCompanys:
+                        thisregister.comapnys.add(comp)
+                    thisregister.filename = networkName
+                    thisregister.save() 
+                    
+                except Exception as e:
+                    print(e)
+        except Exception as e:
+            print(e)
+            raise Exception("Critical Error, cant get a working TrainingDataRegister")
+
+        trainingdate = self.settings.firstInculdedDate.replace(hour=0, minute =0, second=0, microsecond=0, tzinfo=pytz.utc)
+
+        daycounter = 0
+
+        YesterdayStockData = None
+        while trainingdate <= self.settings.lastIncudedDate:
+            TodayStockData = CompanyStockDay.objects.filter(
+                timestamp=trainingdate
+            ).order_by("comapny__companyId")
+            
+            if(TodayStockData.count() == 0):
+                trainingdate = trainingdate + timedelta(days=1)
+                continue
+            thisrow = []
+            daycounter = daycounter + 1
+            for stockindex, thisStock in enumerate(TodayStockData):
+                try:
+                    if(thisStock.comapny.companyId in corruptCompanysArray):
+                        print ('Corrupt company ', thisStock.comapny)
+                        continue
+                    try:
+                        # close
+                        stockratio = (
+                            thisStock.close / YesterdayStockData[stockindex].close
+                        )
+                        thisrow.append(stockratio)
+
+                    except Exception as e:
+                        # if stockindex == 0:
+                        #     print(f"No stockRatio, added 1..")
+                        thisrow.append(1.0)
+                    #
+                except Exception as e:
+                    print(f"Error: for {thisStock} , {e}")
+                    raise Exception(e)
+
+            try:
+
+                print(f"{trainingdate} : {len(thisrow)} : {thisrow[0:10]}..")
+
+                appendToFileOnDisk([thisrow] , thisregister.fileName + '.csv')
+ 
+            except Exception as e:
+                raise Exception(f"Critical grand error!!: {e}")
+            YesterdayStockData = TodayStockData
+            trainingdate = trainingdate + timedelta(days=1)
+
+
+
+    def go(self):
         
         #subprocess.Popen([r'plotter_start.bat'],  shell=True)
         Epoch_zero_time = datetime.now()
-        time_to_change = Epoch_zero_time + timedelta(minutes=self.settings.stockTrainingTime)
-        
+        time_to_change = Epoch_zero_time + timedelta(minutes=self.NetworkSettings.stockTrainingTime)
         firsttime = True
 
         best_avg_loss = 10000000
         torch.cuda.empty_cache()  
         model_type="FF"
         EPOCHS=500000
+        
+        
     
         train_loader, eval_loader, output_dim, DaysInData, SamplesPerday, test_start, batch_size  = self.prepare_data()
         if(MockData):
