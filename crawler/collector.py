@@ -27,10 +27,12 @@ class DataCrawler:
     def __init__(self, CollctorSettingsName=None):
         super(DataCrawler, self).__init__()
         if(CollctorSettingsName == None):
+            print('Gerting default colletor')
             try:
                 self.settings = CollectorSettings.objects.get(collectionName='')
             except CollectorSettings.DoesNotExist:
-                CollectorSettings.objects.create(collectionName='')
+                
+                self.settings = CollectorSettings.objects.create(collectionName='')
             except Exception as e:
                 print(e)
                 raise Exception('no collection settings')
@@ -42,7 +44,7 @@ class DataCrawler:
           
                 
         now = datetime.now().replace(tzinfo=pytz.utc)
-        self.settings.collectionTimestamp = now()
+        self.settings.collectionTimestamp = now
         self.settings.completeColletion = False
         self.settings.firstInculdedDate = (now - timedelta(days=(self.settings.daysToCollect))).replace(hour=0, minute=0, tzinfo=pytz.utc)
         self.settings.lastIncudedDate = now.replace(hour=0, minute=0, tzinfo=pytz.utc)
@@ -370,6 +372,7 @@ class DataCrawler:
             from_string = str(int(datetime.timestamp(self.settings.firstInculdedDate)))
             to_string = str(int(datetime.timestamp(self.settings.lastIncudedDate)))
             for indexstart, thiscompany in enumerate(MyCompanys):
+
                 CompanyRDIIntervall = []
                 if not thiscompany.name in StocksjsoninMemory:
                     StocksjsoninMemory[thiscompany.name] = {}
@@ -411,48 +414,67 @@ class DataCrawler:
 
                     Created = 1
                     totalpoints = 1
-
+                    firstdatapintwritten = False
+                    if( thiscompany.name == 'investment ab spiltan'):
+                        x=99
                     for index, datepoint in enumerate(History["t"]):
                         totalpoints += 1
-                        mydate = datetime.fromtimestamp(datepoint, pytz.utc)
-
-                        # first datapoint is later than firstincluded...
-                        if (
-                            index == 0
-                            and mydate.date() > self.settings.firstInculdedDate.date()
-                        ):
-                            print(
-                                f"{thiscompany.name} first datapoint is later than firstincluded, removed from StocksjsoninMemory....."
-                            )
-                            StocksjsoninMemory.pop(thiscompany.name, None)
+                        mydate = datetime.fromtimestamp(datepoint, pytz.utc).date()
+                        # data before first date
+                        if mydate < self.settings.firstInculdedDate.date():
+                            print(f"{mydate} is before {self.settings.firstInculdedDate.date()}  for comapny {thiscompany.name}....")
                             continue
-                            # data before first date
-
-                        if mydate.date() < self.settings.firstInculdedDate.date():
-                            print(
-                                f"{mydate.date()} is before {self.settings.firstInculdedDate.date()}  for comapny {thiscompany.name}...."
-                            )
-                            continue
-                        else:
-                            print(f"{mydate.date()} is ok...")
 
                         StocksjsoninMemory[thiscompany.name][str(mydate)] = {}
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "open"
-                        ] = History["o"][index]
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "close"
-                        ] = History["c"][index]
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "high"
-                        ] = History["h"][index]
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "low"
-                        ] = History["l"][index]
-                        StocksjsoninMemory[thiscompany.name][str(mydate)][
-                            "volume"
-                        ] = History["v"][index]
+                        # first datapoint is later than firstincluded...
+                        if (not firstdatapintwritten and mydate > self.settings.firstInculdedDate.date()):
+                    
+                            StockDate =  self.settings.firstInculdedDate.date()
+                            while (StockDate < mydate):
+                
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)] = {}
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["close"] = History["c"][index]
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["Rsi"] = 1
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["open"] = History["o"][index]
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["high"] = History["h"][index]
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["low"] = History["l"][index]
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["volume"] = History["v"][index]
+                                StocksjsoninMemory[thiscompany.name][str(StockDate)]["daydiff_volume"] = 1
+                                StockDate = StockDate + timedelta(days=1)
+                        
+                        #last datapoint is not lastincluded        
+                        if (index+1 == (len(History["t"])) and mydate < self.settings.lastIncudedDate.date()):
+                            if(CreatingCollection):
+                                print(f"{thiscompany.name} last datapoint is earlier than lastincluded, removed from StocksjsoninMemory.....")
+                                StocksjsoninMemory.pop(thiscompany.name, None)
+                                continue
+                            else:
+                                StockDate =  mydate
+                                while (StockDate < self.settings.lastIncudedDate.date()):
+                   
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)] = {}
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["close"] = History["c"][index]
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["Rsi"] = 1
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["open"] = History["o"][index]
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["high"] = History["h"][index]
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["low"] = History["l"][index]
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["volume"] = History["v"][index]
+                                    StocksjsoninMemory[thiscompany.name][str(StockDate)]["daydiff_volume"] = 1
+                                    StockDate = StockDate + timedelta(days=1)    
+                            
+
+        
+
+                        
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["open"] = History["o"][index]
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["close"] = History["c"][index]
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["high"] = History["h"][index]
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["low"] = History["l"][index]
+                        StocksjsoninMemory[thiscompany.name][str(mydate)]["volume"] = History["v"][index]
                         Histotycounter = 0
+                        
+                        firstdatapintwritten = True
+                        
                         while History["v"][index] == 0:
                             History["v"][index] = History["v"][
                                 index - 1 - Histotycounter
@@ -499,17 +521,14 @@ class DataCrawler:
 
                             backcounter = 1
                             yesterday = mydate - timedelta(days=1)
-                            while (
-                                not str(yesterday)
-                                in StocksjsoninMemory[thiscompany.name]
-                            ):
+                            while (not str(yesterday) in StocksjsoninMemory[thiscompany.name]):
+                                if yesterday <= self.settings.firstInculdedDate.date():
+                                    break
 
                                 yesterday = yesterday - timedelta(days=1)
                                 backcounter += 1
-
-                            Lastknownprice = StocksjsoninMemory[thiscompany.name][
-                                str(yesterday)
-                            ]["close"]
+                                
+                            Lastknownprice = StocksjsoninMemory[thiscompany.name][str(yesterday)]["close"]
                             AvrageChange = (
                                 StocksjsoninMemory[thiscompany.name][str(mydate)][
                                     "close"
@@ -539,11 +558,12 @@ class DataCrawler:
                     try:
                         print(e)
                         print(f"at {index} in {thiscompany.name}, removed from StocksjsoninMemory")
-                        currentcomapny = Companies.objects.get(neame = thiscompany.name)
-                        self.settings.companys.remove(currentcomapny)
+                        currentcomapny = Companies.objects.get(name = thiscompany.name)
+                        self.settings.comapnys.remove(currentcomapny)
                         StocksjsoninMemory.pop(thiscompany.name, None)
                         continue
-                    except:
+                    except Exception as e:
+                        print(e)
                         raise Exception('Cant remove company from collection')
                 SmallEnd = time.time()
                 ELAPSED = SmallEnd - Grandstart
@@ -592,6 +612,8 @@ class DataCrawler:
             for index3, comapnystock in enumerate(StocksjsoninMemory):
                 print(index3, " writing stock to db... ", comapnystock)
                 stockcount = -1
+                if(comapnystock == 'investment ab spiltan'):
+                    x = 99
                 for datapointday in StocksjsoninMemory[comapnystock]:
 
                     # comapny = models.ForeignKey(Companies, on_delete=models.DO_NOTHING)
@@ -605,11 +627,12 @@ class DataCrawler:
                     if datapointday != "UsableData":
                         stockcount += 1
                         try:
-                             CompanyStockDay.objects.get(timestamp=datetime.strptime(datapointday, "%Y-%m-%d %H:%M:%S%z"))
+                  
+                            CompanyStockDay.objects.get(timestamp=datetime.strptime(datapointday, "%Y-%m-%d").replace(tzinfo=pytz.utc))
                         except CompanyStockDay.DoesNotExist: 
                             CompanyStockDay.objects.create(
                                 comapny=Companies.objects.get(name=comapnystock),
-                                timestamp=datetime.strptime(datapointday, "%Y-%m-%d %H:%M:%S%z"),
+                                timestamp=datetime.strptime(datapointday, "%Y-%m-%d").replace(tzinfo=pytz.utc),
                                 close=StocksjsoninMemory[comapnystock][datapointday]["close"],
                                 open=StocksjsoninMemory[comapnystock][datapointday]["open"],
                                 high=StocksjsoninMemory[comapnystock][datapointday]["high"],
@@ -654,7 +677,7 @@ class DataCrawler:
             self.settings.completeCollection = False
             self.settings.save()
             
-            self.GetCompanyList()
+            #self.GetCompanyList()
             self.GetAllStockHistory()
             #self.getworldkpi()
             
